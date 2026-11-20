@@ -226,3 +226,45 @@ def test_home_page_structure(client):
     assert response.status_code == 200
     assert b'id="quiz-of-the-day"' in response.data
     assert b'id="quiz-list"' in response.data
+
+
+def test_quiz_created_at_has_utc_indicator(client):
+    response = client.post("/api/quizzes", json={"title": "UTC Quiz"})
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data["created_at"].endswith(("+00:00", "Z"))
+
+    list_response = client.get("/api/quizzes")
+    assert list_response.status_code == 200
+    quizzes = list_response.get_json()
+    assert quizzes[0]["created_at"].endswith(("+00:00", "Z"))
+
+
+def test_attempt_created_at_has_utc_indicator(client):
+    quiz_id = create_quiz(client)
+    add_question(client, quiz_id, "B")
+    question_id = client.get(f"/api/quizzes/{quiz_id}").get_json()["questions"][0]["id"]
+    client.post(f"/api/quizzes/{quiz_id}/submit", json={
+        "player_name": "Asha",
+        "answers": {str(question_id): "B"},
+    })
+
+    response = client.get(f"/api/quizzes/{quiz_id}/leaderboard")
+    assert response.status_code == 200
+    attempts = response.get_json()
+    assert len(attempts) == 1
+    assert attempts[0]["created_at"].endswith(("+00:00", "Z"))
+
+
+def test_format_datetime_helper():
+    from datetime import datetime, timezone
+    from app.models import format_datetime
+
+    assert format_datetime(None) is None
+
+    naive = datetime(2026, 1, 15, 10, 30, 0)
+    assert format_datetime(naive) == "2026-01-15T10:30:00+00:00"
+
+    aware = datetime(2026, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+    assert format_datetime(aware) == "2026-01-15T10:30:00+00:00"
+
