@@ -485,3 +485,89 @@ def test_home_page_structure(client):
     assert response.status_code == 200
     assert b'id="quiz-of-the-day"' in response.data
     assert b'id="quiz-list"' in response.data
+
+
+def test_player_attempts_name_with_slash(client):
+    quiz_id = create_quiz(client, "Math Quiz")
+    add_question(client, quiz_id, "B")
+    q_id = client.get(f"/api/quizzes/{quiz_id}").get_json()["questions"][0]["id"]
+
+    submit_res = client.post(f"/api/quizzes/{quiz_id}/submit", json={
+        "player_name": "A/B",
+        "answers": {str(q_id): "B"},
+        "time_taken_seconds": 15,
+    })
+    assert submit_res.status_code == 200
+
+    # Path parameter with percent-encoded slash
+    res_encoded = client.get("/api/players/A%2FB/attempts")
+    assert res_encoded.status_code == 200
+    data_encoded = res_encoded.get_json()
+    assert len(data_encoded) == 1
+    assert data_encoded[0]["player_name"] == "A/B"
+    assert data_encoded[0]["quiz_title"] == "Math Quiz"
+
+    # Path parameter with literal slash
+    res_literal = client.get("/api/players/A/B/attempts")
+    assert res_literal.status_code == 200
+    data_literal = res_literal.get_json()
+    assert len(data_literal) == 1
+    assert data_literal[0]["player_name"] == "A/B"
+
+    # Query parameter with player
+    res_query = client.get("/api/players/attempts?player=A%2FB")
+    assert res_query.status_code == 200
+    data_query = res_query.get_json()
+    assert len(data_query) == 1
+    assert data_query[0]["player_name"] == "A/B"
+
+
+def test_player_attempts_normal_name(client):
+    quiz_id = create_quiz(client, "Geography Quiz")
+    add_question(client, quiz_id, "B")
+    q_id = client.get(f"/api/quizzes/{quiz_id}").get_json()["questions"][0]["id"]
+
+    client.post(f"/api/quizzes/{quiz_id}/submit", json={
+        "player_name": "Asha",
+        "answers": {str(q_id): "B"},
+    })
+
+    res = client.get("/api/players/Asha/attempts")
+    assert res.status_code == 200
+    attempts = res.get_json()
+    assert len(attempts) == 1
+    assert attempts[0]["player_name"] == "Asha"
+
+    # Case-insensitive check
+    res_lower = client.get("/api/players/asha/attempts")
+    assert res_lower.status_code == 200
+    assert len(res_lower.get_json()) == 1
+
+
+def test_player_attempts_missing_name(client):
+    res_no_param = client.get("/api/players/attempts")
+    assert res_no_param.status_code == 400
+    assert res_no_param.get_json() == {"error": "Player name is required"}
+
+    res_empty_param = client.get("/api/players/attempts?player=")
+    assert res_empty_param.status_code == 400
+    assert res_empty_param.get_json() == {"error": "Player name is required"}
+
+    res_spaces = client.get("/api/players/%20%20/attempts")
+    assert res_spaces.status_code == 400
+    assert res_spaces.get_json() == {"error": "Player name is required"}
+
+
+def test_player_attempts_no_results(client):
+    res = client.get("/api/players/Nobody/attempts")
+    assert res.status_code == 200
+    assert res.get_json() == []
+
+
+def test_history_page_structure(client):
+    response = client.get("/history")
+    assert response.status_code == 200
+    assert b'id="history-form"' in response.data
+    assert b'id="player-name"' in response.data
+    assert b'id="history-table"' in response.data
+

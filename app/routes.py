@@ -1,6 +1,6 @@
 from datetime import date
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, current_app, jsonify, render_template, request
 
 from app import db, limiter
 from app.models import Attempt, Question, Quiz
@@ -315,9 +315,10 @@ def stats():
     })
 
 
-@api.route("/players/<player_name>/attempts")
-def player_attempts(player_name):
-    name = (player_name or "").strip()
+@api.route("/players/<path:player_name>/attempts")
+@api.route("/players/attempts")
+def player_attempts(player_name=None):
+    name = (request.args.get("player") or request.args.get("name") or player_name or "").strip()
     if not name:
         return error("Player name is required", 400)
     attempts = (
